@@ -196,10 +196,31 @@ def remove_duplicate_sentences(text: str, min_len: int = 25) -> str:
     return "\n\n".join(p for p in kept if p)
 
 
+_CAP_MARK = "\x00CAP\x00"  # internal marker: a filler was removed at a sentence start
+
+
 def trim_filler(text: str, fillers: list[str]) -> str:
     def fn(seg: str) -> str:
         for phrase in fillers:
-            seg = re.compile(re.escape(phrase) + r"[,]?[ \t]*", re.IGNORECASE).sub("", seg)
+            pat = re.compile(re.escape(phrase) + r"[,]?[ \t]*", re.IGNORECASE)
+
+            def repl(m: re.Match) -> str:
+                # Was this filler at the start of a sentence? If so, mark the
+                # spot so the next word gets re-capitalized; else just delete.
+                before = m.string[: m.start()].rstrip()
+                at_sentence_start = (
+                    before == "" or before[-1] in ".!?\n" or before.endswith(_CAP_MARK)
+                )
+                return _CAP_MARK if at_sentence_start else ""
+
+            seg = pat.sub(repl, seg)
+        # Re-capitalize the first letter after a sentence-start removal only.
+        seg = re.sub(
+            re.escape(_CAP_MARK) + r"(\s*)([a-zà-ÿ])",
+            lambda m: m.group(1) + m.group(2).upper(),
+            seg,
+        )
+        seg = seg.replace(_CAP_MARK, "")
         seg = re.sub(r"[ \t]{2,}", " ", seg)
         return re.sub(r"[ \t]+([.,;:!?])", r"\1", seg)
 
