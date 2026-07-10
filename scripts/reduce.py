@@ -255,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--similarity", type=float, default=0.9, help="near-duplicate threshold (0-1, default 0.9)")
     parser.add_argument("--tier2", action="store_true", help="opt into Tier 2 API summarization (needs ANTHROPIC_API_KEY)")
     parser.add_argument("--tier2-chars", type=int, default=1200, help="Tier 2: min block length in chars to summarize")
+    parser.add_argument("--code", action="store_true", help="code mode: strip comments/blank lines (see reduce_code.py)")
     args = parser.parse_args(argv)
 
     if args.input:
@@ -262,6 +263,20 @@ def main(argv: list[str] | None = None) -> int:
             original = fh.read()
     else:
         original = sys.stdin.read()
+
+    if args.code:
+        # Delegate to the code-aware reducer (safe copy for context).
+        from reduce_code import detect_lang, reduce_code
+        lang = detect_lang(args.input)
+        reduced = reduce_code(original, lang=lang)
+        if args.stats:
+            sys.stderr.write(_format_stats(original, reduced) + "\n")
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as fh:
+                fh.write(reduced + "\n")
+        else:
+            sys.stdout.write(reduced + "\n")
+        return 0
 
     reduced = reduce_text(
         original,

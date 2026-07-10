@@ -45,6 +45,24 @@ wording.** Do NOT auto-reduce, and ask the user first, when the content is:
 When unsure, keep the original text. Prefer conservative settings (high
 `--similarity`, disable filler) over losing a distinction.
 
+## Reducing code (explicit, opt-in)
+The default reducer above must NOT touch code. Code has its own mode that
+operates on a **copy you feed as context** — it never rewrites the user's real
+files:
+```
+python scripts/reduce.py app.py --code --stats      # or: reduce_code.py app.py --stats
+```
+It removes comments, blank-line runs, and trailing whitespace, and is
+language-aware (Python via `tokenize`/`ast`; C-family and hash-comment scanners
+are string-safe). It **preserves** shebangs, encoding lines, and directive
+comments (`noqa`, `type:`, `eslint-disable`, `@ts-ignore`, `go:build`, SPDX,
+etc.), and never alters strings, numbers, or logic.
+
+Savings are comment-density dependent. Extra levers (see `reduce_code.py`):
+`--strip-docstrings` (Python) and `--skeleton` (keep signatures, drop bodies —
+biggest cut, structure only). Use code mode when passing source as *context*;
+do not present the stripped copy as the user's file.
+
 ## Workflow routing for large tasks
 Text compression alone is not the main lever for big tasks (large refactors,
 multi-source research). The real saving comes from **not** loading the whole raw

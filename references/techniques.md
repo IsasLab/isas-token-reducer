@@ -84,6 +84,41 @@ actually
 
 ---
 
+## Code mode (`scripts/reduce_code.py`, `reduce.py --code`)
+
+Separate, explicit opt-in for reducing **source code passed as context**. It
+produces a leaner copy for the model and **never rewrites the user's files.**
+
+Techniques:
+1. **Comment stripping** — language-aware. Python uses `tokenize`/`ast`;
+   C-family (`//`, `/* */`) and hash (`#`) use string-aware scanners, so a
+   comment marker inside a string literal is never mistaken for a comment.
+2. **Blank-line handling** — collapse runs to one (default), `remove` entirely,
+   or `keep`.
+3. **Trailing whitespace / tab normalization.**
+4. **`--strip-docstrings`** (Python, off by default) — removes docstrings via ast.
+5. **`--skeleton`** (Python, off by default) — keeps imports, signatures, and
+   class/def headers; replaces bodies with `...`. Biggest reduction; preserves
+   the API surface / structure, not the implementation.
+
+Always preserved (never stripped, even without `--keep-comments`):
+- shebangs (`#!…`) and encoding declarations,
+- directive comments: `noqa`, `type:`, `pragma`, `pylint`/`mypy`/`ruff`/`flake8`,
+  `eslint*`, `@ts-ignore`/`ts-expect-error`, `prettier`, `istanbul`, `go:build`/
+  `go:generate`, `clippy`/`allow(`, `SPDX`/`license`/`copyright`, `TODO`/`FIXME`.
+
+Never altered: string contents, numbers, identifiers, and logic. Stripped and
+`--skeleton` output still parses (verified on this repo's own scripts).
+
+**When NOT to apply / cautions:**
+- Don't present the stripped copy as the user's actual file — it's a context copy.
+- `--no-keep-directives` removes behavior-affecting comments; only use when you
+  are sure none matter.
+- `--strip-docstrings` changes `__doc__` / `help()`; fine for a context copy,
+  not for shipping.
+- Unknown file extensions strip **no** comments (whitespace tidy only) unless you
+  pass `--lang`.
+
 ## Tier 2 — optional, network (opt-in)
 
 `_tier2_summarize()` runs **only** when `--tier2` is passed **and**

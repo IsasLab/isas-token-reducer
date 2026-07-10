@@ -38,7 +38,32 @@ already-tight text will save little, and that is correct behaviour.
   0.9. This is the intended safe default (raise `--similarity` for even less
   aggressive merging).
 
-## Part B — workflow routing (large tasks)
+## Part B — code mode (`reduce_code.py`)
+
+Real measured runs (same heuristic token counter). Code mode strips comments,
+blank-line runs, and trailing whitespace from a **context copy** — it never
+rewrites source files, and every stripped/skeleton output below still parses.
+
+| Input | Mode | Tokens before | after | Saved |
+|-------|------|--------------:|------:|------:|
+| Heavily-commented JS (`08_commented_module.js`) | default (strip comments) | 448 | 138 | **69.2%** |
+| Real Python script (`scripts/reduce.py`, lightly commented) | default | 1551 | 1412 | 9.0% |
+| Real Python script (`scripts/reduce_code.py`) | default | 2011 | 1820 | 9.5% |
+| `scripts/reduce.py` | `--strip-docstrings` | 1551 | 1058 | **31.8%** |
+| `scripts/reduce.py` | `--skeleton` (signatures only) | 1551 | 321 | **79.3%** |
+
+**Honest read:** code savings are driven by comment/docstring density.
+- Lightly-commented code, comments only: **~8–12%.**
+- Heavily-commented code, or any Python with `--strip-docstrings`: **~30–45%.**
+- `--skeleton` (structure only, bodies dropped): **~60–80%** — but the model
+  then sees the API surface, not the implementation. Use it only when structure
+  is what you need (e.g. feeding a scout/planner).
+
+Safety verified: directive comments (`eslint-disable`, `noqa`, `type:`, …),
+shebangs, strings, and numbers are preserved; stripped and skeleton Python still
+`ast.parse()`s.
+
+## Part C — workflow routing (large tasks)
 
 For large tasks the lever is **how many tokens reach the expensive model**, not
 Tier-1 compression. These rows measure the token volume of the raw material a

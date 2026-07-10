@@ -81,9 +81,14 @@ leaves your machine. The only time text touches the Claude API is Tier 2
 summarization, which is opt-in and only runs if you set a key yourself.
 
 **Will it change my code or numbers?**
-No. It removes structural redundancy only and never alters numbers, quotes, code,
-names, or legal/contract wording. When it can't be certain a change is safe, it
-keeps the original text untouched.
+The default reducer never touches code, numbers, quotes, or legal wording — it
+only removes structural redundancy, and keeps the original when unsure. There's
+also an explicit opt-in **code mode** (`--code`) that strips comments and blank
+lines from a *context copy* you feed the model — it preserves strings, numbers,
+logic, shebangs, and directive comments (`eslint-disable`, `noqa`, `type:`, …),
+and never rewrites your actual files. Code savings depend on comment density:
+~8–12% on lightly-commented code, ~30–45% with docstring stripping, more in
+signature-only "skeleton" mode.
 
 **Claude Code vs Claude.ai — what's the difference?**
 In Claude Code it installs as a skill and can use subagents for map-reduce
