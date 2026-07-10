@@ -13,14 +13,14 @@ and filler-phrase trimming. For large tasks it also routes work through a
 map-reduce workflow so cheap gathering agents condense raw material before an
 expensive model reasons over it.
 
-## Wann anwenden (trigger situations)
+## When to apply
 Apply when any of these hold:
 - A long conversation or a large document was pasted in.
 - The same or nearly-identical content repeats across the context.
-- The user says "shorten", "reduce context", "save tokens", "kürzen",
-  "Kontext reduzieren", "Tokens sparen", or similar.
+- The user says "shorten", "reduce context", "save tokens", "trim this", or
+  similar.
 - You are about to feed a big raw dump (whole codebase, many sources) into a
-  single expensive call — see **Workflow-Routing** below.
+  single expensive call — see **Workflow routing** below.
 
 ## Workflow (text compression)
 1. Write the text to a file (or pipe it) and run:
@@ -33,7 +33,7 @@ Apply when any of these hold:
    `--no-near-dedup`, `--no-dedup`, `--no-whitespace`.
 3. Use the reduced text in place of the original. Report the measured savings.
 
-### Wann NICHT reduzieren (safety — read this)
+### When NOT to reduce (safety — read this)
 **The reducer only removes structural redundancy (repeats, whitespace, filler).
 It must never change numbers, quotes, code, names, or legal/contractual
 wording.** Do NOT auto-reduce, and ask the user first, when the content is:
@@ -45,7 +45,7 @@ wording.** Do NOT auto-reduce, and ask the user first, when the content is:
 When unsure, keep the original text. Prefer conservative settings (high
 `--similarity`, disable filler) over losing a distinction.
 
-## Workflow-Routing bei umfangreichen Aufgaben
+## Workflow routing for large tasks
 Text compression alone is not the main lever for big tasks (large refactors,
 multi-source research). The real saving comes from **not** loading the whole raw
 context into one expensive model. Instead:
@@ -69,14 +69,14 @@ context into one expensive model. Instead:
      saving comes from the structure (condense, then process), not from cheaper
      per-step models. See `references/workflow-routing.md`.
 
-## Beispiele
+## Examples
 See `examples/before_after.md` for measured cases. Two quick ones:
 - A long chat with repeated Q&A and filler: duplicate turns and connector
   phrases removed, meaning intact.
 - A doc with copy-pasted paragraphs: exact + near-duplicate paragraphs collapsed
   to one, numbers untouched.
 
-## Referenz
+## Reference
 - `references/techniques.md` — every technique, when NOT to apply it, and the
   maintained filler list.
 - `references/workflow-routing.md` — classification logic, model mapping, the

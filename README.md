@@ -51,38 +51,39 @@ labelled estimates.
 
 ## Installation
 
-### Claude Code (empfohlen — ein Kommando)
+### Claude Code (recommended — one command)
 ```
 curl -fsSL https://raw.githubusercontent.com/IsasLab/isas-token-reducer/main/install.sh | bash
 ```
-Installiert Skill + Workflow-Routing-Subagenten automatisch. Kein Neustart nötig.
+Installs the skill + workflow-routing subagents automatically. No restart needed.
 
-Alternative ohne curl (z. B. Firmen-Proxy blockt Downloads) — manuell klonen:
+Alternative without curl (e.g. a corporate proxy blocks downloads) — clone
+manually:
 ```
 git clone https://github.com/IsasLab/isas-token-reducer ~/.claude/skills/isas-token-reducer \
   && cp isas-token-reducer/agents/*.md ~/.claude/agents/
 ```
 
-**Windows:** Führe das obige `curl`/`git`-Kommando in **Git Bash** oder **WSL**
-aus (nicht in cmd.exe / PowerShell). Ein separates `.ps1` gibt es in v1 bewusst
-nicht — Git Bash ist auf Windows-Entwicklermaschinen praktisch immer vorhanden.
+**Windows:** run the `curl`/`git` command above in **Git Bash** or **WSL** (not
+cmd.exe / PowerShell). There is deliberately no separate `.ps1` in v1 — Git Bash
+is present on virtually every Windows dev machine.
 
 ### Claude.ai (Chat)
-1. Fertige ZIP von der GitHub-Releases-Seite laden (nicht selbst zippen —
-   Struktur-Fehler sind der häufigste Grund, warum ein Skill nach Upload nicht
-   triggert). Alternativ lokal bauen: `bash scripts/build_claude_ai_zip.sh`
-   erzeugt `isas-token-reducer.zip` mit korrekter Ordnerstruktur.
-2. Settings > Capabilities > Skills > "+ Create skill" > ZIP hochladen.
-3. Skill in der Liste aktivieren (Toggle).
+1. Download the ready-made ZIP from the GitHub Releases page (don't zip it
+   yourself — a wrong folder structure is the most common reason an uploaded
+   skill never triggers). Or build it locally: `bash scripts/build_claude_ai_zip.sh`
+   produces `isas-token-reducer.zip` with the correct structure.
+2. Settings > Capabilities > Skills > "+ Create skill" > upload the ZIP.
+3. Enable the skill in the list (toggle).
 
-**Automatisches Modell-Routing über Subagenten gibt es auf Claude.ai nicht**
-(kein `agents/`-Mechanismus; das Modell wird pro Konversation manuell gewählt).
-Der Skill gibt dort nur die gestufte Vorgehensweise als Anleitung vor — der
-Tokenvorteil kommt aus der Struktur (erst verdichten, dann verarbeiten), nicht
-aus günstigeren Modellen pro Schritt.
+**Automatic per-step model routing via subagents does not exist on Claude.ai**
+(there is no `agents/` mechanism; the model is chosen once per conversation).
+There the skill only supplies the staged approach as guidance — the token
+benefit comes from the structure (condense first, then process), not from
+cheaper per-step models.
 
-> **Hinweis:** Skills werden pro Oberfläche separat verwaltet — ein Upload auf
-> Claude.ai deckt nicht automatisch Claude Code oder die API ab, und umgekehrt.
+> **Note:** Skills are managed separately per surface — an upload to Claude.ai
+> does not automatically cover Claude Code or the API, and vice versa.
 
 ## License
 

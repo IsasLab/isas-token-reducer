@@ -43,25 +43,27 @@ from count_tokens import count_tokens, is_estimate  # noqa: E402
 # Fallback filler list, used only if references/techniques.md cannot be read
 # (e.g. reduce.py copied out on its own). The maintained source is techniques.md.
 _DEFAULT_FILLERS = [
-    "es ist wichtig zu beachten, dass",
-    "es sei darauf hingewiesen, dass",
-    "wie bereits erwähnt",
-    "wie bereits erwähnt wurde",
-    "an dieser stelle sei gesagt, dass",
-    "im großen und ganzen",
-    "im grunde genommen",
-    "letzten endes",
     "it is important to note that",
     "it should be noted that",
     "it is worth noting that",
+    "please note that",
     "as previously mentioned",
     "as mentioned above",
     "as already stated",
+    "as a matter of fact",
+    "it goes without saying that",
+    "the fact of the matter is that",
     "needless to say",
     "at the end of the day",
+    "when all is said and done",
+    "for all intents and purposes",
+    "in the final analysis",
     "in conclusion",
     "to summarize",
+    "to sum up",
     "basically",
+    "essentially",
+    "actually",
 ]
 
 _TECHNIQUES_PATH = Path(__file__).resolve().parent.parent / "references" / "techniques.md"

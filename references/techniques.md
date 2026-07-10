@@ -59,17 +59,6 @@ The maintained filler list (one phrase per line, case-insensitive). Add or
 remove phrases here — `reduce.py` reads exactly this block:
 
 <!-- FILLER-LIST-START -->
-es ist wichtig zu beachten, dass
-es sei darauf hingewiesen, dass
-es sollte beachtet werden, dass
-wie bereits erwähnt
-wie bereits erwähnt wurde
-wie oben erwähnt
-an dieser stelle sei gesagt, dass
-im großen und ganzen
-im grunde genommen
-letzten endes
-zum jetzigen zeitpunkt
 it is important to note that
 it should be noted that
 it is worth noting that
@@ -77,8 +66,14 @@ please note that
 as previously mentioned
 as mentioned above
 as already stated
+as a matter of fact
+it goes without saying that
+the fact of the matter is that
 needless to say
 at the end of the day
+when all is said and done
+for all intents and purposes
+in the final analysis
 in conclusion
 to summarize
 to sum up
@@ -115,4 +110,4 @@ name, quote, and factual claim exactly.
   detail (a negation, a different figure).
 
 If any of these are in scope, run with the relevant technique disabled, or skip
-reduction and ask the user first. See `SKILL.md` → "Wann NICHT reduzieren".
+reduction and ask the user first. See `SKILL.md` → "When NOT to reduce".
