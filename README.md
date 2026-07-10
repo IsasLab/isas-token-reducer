@@ -1,4 +1,5 @@
-# ISAS Token Reducer
+# isas-token-reducer
+Humanity built powerful AI. Now we optimize its fuel.
 
 A Claude Skill that **reduces tokens before Claude processes your text** — so
 long conversations, big pasted documents, and repetitive context cost less
