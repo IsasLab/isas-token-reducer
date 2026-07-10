@@ -29,9 +29,16 @@ Apply when any of these hold:
    ```
    `--stats` prints before/after token counts and % saved to stderr; the reduced
    text goes to stdout (or use `-o output.txt`).
-2. Tune when needed: `--similarity 0.97` (stricter near-dup), `--no-filler`,
-   `--no-near-dedup`, `--no-dedup`, `--no-whitespace`.
-3. Use the reduced text in place of the original. Report the measured savings.
+2. Pick aggressiveness with `--level safe|balanced|aggressive` (default
+   `balanced`). Techniques by level: whitespace, lossless JSON minify, filler
+   trimming, exact/near-duplicate removal (all levels); verbose-phrase
+   compression, sentence-level dedup, markdown normalization (`balanced`+);
+   lower near-dup threshold + blank-line removal (`aggressive`). See
+   `references/techniques.md`.
+3. Tune individually when needed: `--similarity 0.97`, `--no-phrases`,
+   `--no-filler`, `--no-near-dedup`, `--no-sentence-dedup`, `--no-json`,
+   `--no-whitespace`.
+4. Use the reduced text in place of the original. Report the measured savings.
 
 ### When NOT to reduce (safety — read this)
 **The reducer only removes structural redundancy (repeats, whitespace, filler).

@@ -84,6 +84,50 @@ actually
 
 ---
 
+### 5. Verbose-phrase compression
+`compress_phrases()` — map maintained in `references/phrase_map.md`.
+
+- Replaces wordy phrases with meaning-identical shorter forms
+  (`in order to` → `to`, `due to the fact that` → `because`). Case-insensitive
+  with first-letter capitalization preserved; longest phrases matched first.
+- Every entry passed **double adversarial review** (two independent reviewers had
+  to agree it never changes meaning) before being added to the map.
+- Skips fenced/inline code and `>` blockquotes, so it never rewrites code or
+  quoted text. On by default at `balanced`+; off at `safe`.
+- **When NOT to apply:** verbatim quotations you must preserve word-for-word
+  (use `--no-phrases` or `--level safe`).
+
+### 6. Duplicate-sentence removal
+`remove_duplicate_sentences()`
+
+- Drops exact duplicate sentences (normalized) across the whole prose, including
+  repeats *within* a paragraph that paragraph-level dedup misses. Only sentences
+  ≥ 25 chars are deduped, so short repeats ("Yes.", "OK.") are kept.
+- On at `balanced`+; off at `safe`. Disable with `--no-sentence-dedup`.
+
+### 7. Lossless JSON minification
+`minify_json()`
+
+- Detects whole-document JSON (or ```json fenced blocks) and strips only
+  whitespace **outside** string literals via a string-aware scanner. Numbers and
+  string contents are byte-identical — no value ever changes.
+- Whole-document JSON short-circuits: no prose pass may touch it.
+- On at every level. Disable with `--no-json`.
+
+### 8. Markdown / structure normalization
+`normalize_markdown()` — strips trailing spaces and collapses blank-line runs
+without changing rendered meaning. On at `balanced`+.
+
+## Levels (`--level`)
+
+| Level | Techniques | Use when |
+|-------|-----------|----------|
+| `safe` | whitespace, JSON, filler, exact + near-dup (0.92) | fidelity matters most |
+| `balanced` (default) | safe + phrase compression + sentence dedup + markdown (near-dup 0.90) | everyday use |
+| `aggressive` | balanced + near-dup 0.85 + drop all blank lines | maximum trimming, review the output |
+
+Any technique can still be toggled individually (`--no-phrases`, `--no-json`, …).
+
 ## Code mode (`scripts/reduce_code.py`, `reduce.py --code`)
 
 Separate, explicit opt-in for reducing **source code passed as context**. It

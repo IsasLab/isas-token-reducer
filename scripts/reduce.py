@@ -1,102 +1,141 @@
 #!/usr/bin/env python3
 """ISAS Token Reducer — rule-based, zero-dependency context compression.
 
-Tier 1 (always on, fully offline, Python standard library only):
-  1. Whitespace normalization  — collapse blank lines, strip trailing space,
-     normalize tabs.
-  2. Exact duplicate removal    — drop paragraphs that appear more than once.
-  3. Near-duplicate removal     — drop paragraphs whose similarity to an
-     already-kept paragraph exceeds a threshold (difflib.SequenceMatcher, no
-     ML model, no network).
-  4. Filler-phrase trimming     — remove low-information connectors. The phrase
-     list is MAINTAINED in ../references/techniques.md (between the
-     FILLER-LIST markers) so it is documented, not hidden in code.
+Tier 1 (always on, fully offline, Python standard library only). Techniques,
+selected by `--level`:
+  * Whitespace normalization
+  * Exact + near-duplicate paragraph removal (difflib, no ML, no network)
+  * Exact duplicate-sentence removal
+  * Filler-phrase trimming            (list in ../references/techniques.md)
+  * Verbose-phrase compression        (map in ../references/phrase_map.md)
+  * Lossless JSON whitespace minify   (numbers/strings preserved exactly)
+  * Markdown/structure normalization
 
-Tier 2 (optional, opt-in): summarize long blocks via the Claude API. Runs ONLY
-when ``--tier2`` is passed AND ``ANTHROPIC_API_KEY`` is set. The anthropic SDK
-is lazy-imported, so Tier 1 never requires the network or any dependency.
+Levels:
+  safe        conservative: whitespace, dedup, near-dup@0.92, filler, JSON.
+  balanced    (default) safe + phrase compression + sentence dedup + markdown.
+  aggressive  balanced + near-dup@0.85 + drop-all-blank-lines.
 
-SAFETY: this tool only removes STRUCTURAL redundancy (repeats, whitespace,
-filler connectors). It must never alter numbers, quotes, code, or legal text.
-Tier 1 operates at paragraph granularity and never rewrites the words inside a
-kept paragraph.
+Tier 2 (optional, opt-in): `--tier2` + ANTHROPIC_API_KEY summarizes long blocks
+via the Claude API. Lazy-imported; Tier 1 never needs the network.
 
-CLI examples:
-    python reduce.py input.txt
-    python reduce.py input.txt --stats
-    python reduce.py input.txt -o output.txt
-    python reduce.py input.txt --similarity 0.85 --no-filler
+Code mode: `--code` delegates to reduce_code.py (comment/blank-line stripping
+for a source-code context copy). See that module.
+
+SAFETY: only structural redundancy or provably meaning-identical wording is
+touched. Numbers, quotes, code, names, and legal text are never altered. Phrase
+compression and filler trimming skip fenced/inline code and blockquotes.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
 from difflib import SequenceMatcher
 from pathlib import Path
 
-# Make count_tokens importable whether run as a script or imported.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from count_tokens import count_tokens, is_estimate  # noqa: E402
 
-# Fallback filler list, used only if references/techniques.md cannot be read
-# (e.g. reduce.py copied out on its own). The maintained source is techniques.md.
+# --------------------------------------------------------------------------- #
+# Maintained data (filler phrases + verbose->concise map) live in references/.
+# --------------------------------------------------------------------------- #
+_REF = Path(__file__).resolve().parent.parent / "references"
+_TECHNIQUES_PATH = _REF / "techniques.md"
+_PHRASEMAP_PATH = _REF / "phrase_map.md"
+_FILLER_START, _FILLER_END = "<!-- FILLER-LIST-START -->", "<!-- FILLER-LIST-END -->"
+_SUBS_START, _SUBS_END = "<!-- SUBS-LIST-START -->", "<!-- SUBS-LIST-END -->"
+
 _DEFAULT_FILLERS = [
-    "it is important to note that",
-    "it should be noted that",
-    "it is worth noting that",
-    "please note that",
-    "as previously mentioned",
-    "as mentioned above",
-    "as already stated",
-    "as a matter of fact",
-    "it goes without saying that",
-    "the fact of the matter is that",
-    "needless to say",
-    "at the end of the day",
-    "when all is said and done",
-    "for all intents and purposes",
-    "in the final analysis",
-    "in conclusion",
-    "to summarize",
-    "to sum up",
-    "basically",
-    "essentially",
-    "actually",
+    "it is important to note that", "it should be noted that",
+    "it is worth noting that", "please note that", "as previously mentioned",
+    "as mentioned above", "as already stated", "needless to say",
+    "at the end of the day", "in conclusion", "to summarize", "basically",
+]
+# Small built-in fallback map (real map is in references/phrase_map.md).
+_DEFAULT_SUBS = [
+    ("in order to", "to"), ("due to the fact that", "because"),
+    ("in the event that", "if"), ("at this point in time", "now"),
+    ("a large number of", "many"), ("has the ability to", "can"),
+    ("in spite of the fact that", "although"), ("with regard to", "about"),
 ]
 
-_TECHNIQUES_PATH = Path(__file__).resolve().parent.parent / "references" / "techniques.md"
-_FILLER_START = "<!-- FILLER-LIST-START -->"
-_FILLER_END = "<!-- FILLER-LIST-END -->"
 
-
-def load_fillers(techniques_path: Path = _TECHNIQUES_PATH) -> list[str]:
-    """Load the filler list from techniques.md, falling back to the builtin list."""
-    try:
-        text = techniques_path.read_text(encoding="utf-8")
-    except OSError:
-        return list(_DEFAULT_FILLERS)
-    if _FILLER_START not in text or _FILLER_END not in text:
-        return list(_DEFAULT_FILLERS)
-    block = text.split(_FILLER_START, 1)[1].split(_FILLER_END, 1)[0]
-    phrases = []
+def _extract_block(text: str, start: str, end: str) -> list[str]:
+    if start not in text or end not in text:
+        return []
+    block = text.split(start, 1)[1].split(end, 1)[0]
+    lines = []
     for line in block.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or line.startswith("```"):
             continue
-        phrases.append(line)
-    return phrases or list(_DEFAULT_FILLERS)
+        lines.append(line)
+    return lines
+
+
+def load_fillers(path: Path = _TECHNIQUES_PATH) -> list[str]:
+    try:
+        lines = _extract_block(path.read_text(encoding="utf-8"), _FILLER_START, _FILLER_END)
+    except OSError:
+        lines = []
+    return lines or list(_DEFAULT_FILLERS)
+
+
+def load_substitutions(path: Path = _PHRASEMAP_PATH) -> list[tuple[str, str]]:
+    """Load verbose->concise pairs from phrase_map.md (`from => to` per line)."""
+    subs: list[tuple[str, str]] = []
+    try:
+        for line in _extract_block(path.read_text(encoding="utf-8"), _SUBS_START, _SUBS_END):
+            if "=>" not in line:
+                continue
+            frm, to = line.split("=>", 1)
+            frm, to = frm.strip(), to.strip()
+            if frm and frm.lower() != to.lower():
+                subs.append((frm, to))
+    except OSError:
+        pass
+    subs = subs or list(_DEFAULT_SUBS)
+    # longest phrase first so overlapping phrases resolve to the biggest win
+    subs.sort(key=lambda p: len(p[0]), reverse=True)
+    return subs
+
+
+# --------------------------------------------------------------------------- #
+# Code-span protection: apply a text transform to prose only, never to fenced
+# code, inline `code`, or `>` blockquote lines.
+# --------------------------------------------------------------------------- #
+_FENCE_RE = re.compile(r"(```.*?```|~~~.*?~~~)", re.S)
+_INLINE_CODE_RE = re.compile(r"(`[^`\n]*`)")
+
+
+def _apply_to_prose(text: str, fn) -> str:
+    out: list[str] = []
+    for i, chunk in enumerate(_FENCE_RE.split(text)):
+        if i % 2 == 1:  # fenced code block
+            out.append(chunk)
+            continue
+        for j, seg in enumerate(_INLINE_CODE_RE.split(chunk)):
+            if j % 2 == 1:  # inline code span
+                out.append(seg)
+            else:
+                # protect markdown blockquote lines within the segment
+                lines = seg.split("\n")
+                out.append("\n".join(ln if ln.lstrip().startswith(">") else fn(ln) for ln in lines))
+    return "".join(out)
 
 
 # --------------------------------------------------------------------------- #
 # Tier 1 techniques
 # --------------------------------------------------------------------------- #
-def normalize_whitespace(text: str) -> str:
-    """Collapse blank runs, strip trailing whitespace, normalize tabs."""
+def normalize_whitespace(text: str, drop_all_blank: bool = False) -> str:
     lines = [ln.replace("\t", "    ").rstrip() for ln in text.split("\n")]
     text = "\n".join(lines)
     text = re.sub(r"\n{3,}", "\n\n", text)
+    if drop_all_blank:
+        text = "\n".join(ln for ln in text.split("\n") if ln.strip())
     return text.strip("\n")
 
 
@@ -104,12 +143,11 @@ def _split_paragraphs(text: str) -> list[str]:
     return [p for p in re.split(r"\n\s*\n", text) if p.strip()]
 
 
-def _norm_key(paragraph: str) -> str:
-    return re.sub(r"\s+", " ", paragraph.strip()).lower()
+def _norm_key(s: str) -> str:
+    return re.sub(r"\s+", " ", s.strip()).lower()
 
 
 def remove_exact_duplicates(text: str) -> str:
-    """Drop paragraphs whose normalized text has already appeared."""
     seen: set[str] = set()
     kept: list[str] = []
     for para in _split_paragraphs(text):
@@ -122,46 +160,160 @@ def remove_exact_duplicates(text: str) -> str:
 
 
 def remove_near_duplicates(text: str, threshold: float = 0.9) -> str:
-    """Drop paragraphs that are >= ``threshold`` similar to a kept paragraph."""
-    kept: list[tuple[str, str]] = []  # (original, norm_key)
+    kept: list[tuple[str, str]] = []
     for para in _split_paragraphs(text):
         key = _norm_key(para)
-        is_dup = any(
-            SequenceMatcher(None, key, prev_key).ratio() >= threshold
-            for _, prev_key in kept
-        )
-        if not is_dup:
-            kept.append((para, key))
+        if any(SequenceMatcher(None, key, k).ratio() >= threshold for _, k in kept):
+            continue
+        kept.append((para, key))
     return "\n\n".join(p for p, _ in kept)
 
 
+_SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def remove_duplicate_sentences(text: str, min_len: int = 25) -> str:
+    """Drop exact duplicate sentences (normalized) across the whole prose.
+
+    Only substantial sentences (>= min_len chars) are deduped, so short repeats
+    like 'OK.' or 'Yes.' are preserved. Code spans are protected by the caller.
+    """
+    seen: set[str] = set()
+
+    def dedup_paragraph(par: str) -> str:
+        parts = _SENT_SPLIT_RE.split(par)
+        out = []
+        for s in parts:
+            key = _norm_key(s)
+            if len(key) >= min_len and key in seen:
+                continue
+            if len(key) >= min_len:
+                seen.add(key)
+            out.append(s)
+        return " ".join(out).strip()
+
+    kept = [dedup_paragraph(p) for p in _split_paragraphs(text)]
+    return "\n\n".join(p for p in kept if p)
+
+
 def trim_filler(text: str, fillers: list[str]) -> str:
-    """Remove filler connector phrases (case-insensitive) and tidy spacing."""
-    for phrase in fillers:
-        pattern = re.compile(re.escape(phrase) + r"[,]?[ \t]*", re.IGNORECASE)
-        text = pattern.sub("", text)
-    # tidy up doubled spaces / space-before-punctuation left behind
-    text = re.sub(r"[ \t]{2,}", " ", text)
-    text = re.sub(r"[ \t]+([.,;:!?])", r"\1", text)
+    def fn(seg: str) -> str:
+        for phrase in fillers:
+            seg = re.compile(re.escape(phrase) + r"[,]?[ \t]*", re.IGNORECASE).sub("", seg)
+        seg = re.sub(r"[ \t]{2,}", " ", seg)
+        return re.sub(r"[ \t]+([.,;:!?])", r"\1", seg)
+
+    return _apply_to_prose(text, fn)
+
+
+def compress_phrases(text: str, subs: list[tuple[str, str]]) -> str:
+    """Replace verbose phrases with meaning-identical shorter forms (prose only)."""
+    compiled = []
+    for frm, to in subs:
+        pat = re.compile(r"\b" + re.escape(frm) + r"\b", re.IGNORECASE)
+        compiled.append((pat, to))
+
+    def fn(seg: str) -> str:
+        for pat, to in compiled:
+            def repl(m, _to=to):
+                if _to and m.group(0)[:1].isupper():
+                    return _to[:1].upper() + _to[1:]
+                return _to
+            seg = pat.sub(repl, seg)
+        seg = re.sub(r"[ \t]{2,}", " ", seg)
+        seg = re.sub(r"\s+([.,;:!?])", r"\1", seg)
+        return seg
+
+    return _apply_to_prose(text, fn)
+
+
+def _strip_json_ws(s: str) -> str:
+    out: list[str] = []
+    i, n = 0, len(s)
+    in_str = False
+    while i < n:
+        c = s[i]
+        if in_str:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(s[i + 1])
+                i += 2
+                continue
+            if c == '"':
+                in_str = False
+            i += 1
+            continue
+        if c == '"':
+            in_str = True
+            out.append(c)
+            i += 1
+            continue
+        if c in " \t\n\r":
+            i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def minify_json(text: str) -> str:
+    """Losslessly strip whitespace from whole-document JSON or ```json blocks.
+
+    Only whitespace outside string literals is removed — numbers and strings are
+    byte-identical, so no value ever changes.
+    """
+    stripped = text.strip()
+    if stripped[:1] in "{[":
+        try:
+            json.loads(stripped)
+            return _strip_json_ws(stripped)
+        except ValueError:
+            pass
+
+    def repl(m: re.Match) -> str:
+        body = m.group(1)
+        try:
+            json.loads(body)
+        except ValueError:
+            return m.group(0)
+        return "```json\n" + _strip_json_ws(body).strip() + "\n```"
+
+    return re.sub(r"```json\s*(.*?)```", repl, text, flags=re.S)
+
+
+def normalize_markdown(text: str) -> str:
+    # one blank line max around ATX headings; strip trailing '#'; tidy list markers
+    text = re.sub(r"[ \t]+$", "", text, flags=re.M)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return text
 
 
 # --------------------------------------------------------------------------- #
-# Tier 2 (optional, network) — lazy imported, never required for Tier 1
+# Levels
+# --------------------------------------------------------------------------- #
+LEVELS = {
+    "safe": dict(json=True, whitespace=True, phrases=False, filler=True,
+                 dedup=True, sentence_dedup=False, near_dedup=True,
+                 similarity=0.92, markdown=False, drop_all_blank=False),
+    "balanced": dict(json=True, whitespace=True, phrases=True, filler=True,
+                     dedup=True, sentence_dedup=True, near_dedup=True,
+                     similarity=0.90, markdown=True, drop_all_blank=False),
+    "aggressive": dict(json=True, whitespace=True, phrases=True, filler=True,
+                       dedup=True, sentence_dedup=True, near_dedup=True,
+                       similarity=0.85, markdown=True, drop_all_blank=True),
+}
+
+
+# --------------------------------------------------------------------------- #
+# Tier 2 (optional, network) — lazy imported
 # --------------------------------------------------------------------------- #
 def _tier2_summarize(text: str, char_threshold: int) -> str:
-    """Summarize paragraphs longer than ``char_threshold`` via the Claude API.
-
-    No-ops (with a stderr note) if the SDK is missing or a call fails, so a
-    partial/offline environment degrades gracefully instead of erroring.
-    """
     try:
-        import anthropic  # noqa: PLC0415 - optional, only reached when opted in
+        import anthropic  # noqa: PLC0415
     except ImportError:
         sys.stderr.write("[tier2] anthropic SDK not installed; skipping Tier 2.\n")
         return text
-
-    client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from the env
+    client = anthropic.Anthropic()
     out: list[str] = []
     for para in _split_paragraphs(text):
         if len(para) <= char_threshold:
@@ -171,17 +323,10 @@ def _tier2_summarize(text: str, char_threshold: int) -> str:
             resp = client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=512,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            "Condense the following text to its essential "
-                            "information. Preserve every number, name, quote, "
-                            "and factual claim exactly. Do not add commentary.\n\n"
-                            + para
-                        ),
-                    }
-                ],
+                messages=[{"role": "user", "content": (
+                    "Condense the following text to its essential information. "
+                    "Preserve every number, name, quote, and factual claim exactly. "
+                    "Do not add commentary.\n\n" + para)}],
             )
             out.append(resp.content[0].text.strip())
         except Exception as exc:  # network / auth / rate limit
@@ -196,65 +341,84 @@ def _tier2_summarize(text: str, char_threshold: int) -> str:
 def reduce_text(
     text: str,
     *,
-    whitespace: bool = True,
-    dedup: bool = True,
-    near_dedup: bool = True,
-    filler: bool = True,
-    similarity: float = 0.9,
+    level: str = "balanced",
+    overrides: dict | None = None,
     fillers: list[str] | None = None,
+    subs: list[tuple[str, str]] | None = None,
     tier2: bool = False,
     tier2_char_threshold: int = 1200,
 ) -> str:
-    """Apply the enabled reduction techniques and return the reduced text."""
+    cfg = dict(LEVELS.get(level, LEVELS["balanced"]))
+    if overrides:
+        cfg.update({k: v for k, v in overrides.items() if v is not None})
     if fillers is None:
         fillers = load_fillers()
-    if whitespace:
+    if subs is None:
+        subs = load_substitutions()
+
+    if cfg["json"]:
+        stripped = text.strip()
+        if stripped[:1] in "{[":
+            try:
+                json.loads(stripped)
+                # Whole-document JSON: minify losslessly and stop — it is data,
+                # not prose, so no prose pass may touch it.
+                return _strip_json_ws(stripped)
+            except ValueError:
+                pass
+        text = minify_json(text)  # only embedded ```json blocks from here
+    if cfg["whitespace"]:
         text = normalize_whitespace(text)
-    if dedup:
-        text = remove_exact_duplicates(text)
-    if near_dedup:
-        text = remove_near_duplicates(text, similarity)
-    if filler:
+    if cfg["phrases"]:
+        text = compress_phrases(text, subs)
+    if cfg["filler"]:
         text = trim_filler(text, fillers)
-    if whitespace:
-        text = normalize_whitespace(text)
+    if cfg["dedup"]:
+        text = remove_exact_duplicates(text)
+    if cfg["sentence_dedup"]:
+        text = remove_duplicate_sentences(text)
+    if cfg["near_dedup"]:
+        text = remove_near_duplicates(text, cfg["similarity"])
+    if cfg["markdown"]:
+        text = normalize_markdown(text)
+    if cfg["whitespace"]:
+        text = normalize_whitespace(text, drop_all_blank=cfg["drop_all_blank"])
     if tier2:
         if os.environ.get("ANTHROPIC_API_KEY"):
             text = _tier2_summarize(text, tier2_char_threshold)
         else:
-            sys.stderr.write(
-                "[tier2] ANTHROPIC_API_KEY not set; skipping Tier 2 (Tier 1 done).\n"
-            )
+            sys.stderr.write("[tier2] ANTHROPIC_API_KEY not set; skipping Tier 2 (Tier 1 done).\n")
     return text
 
 
 def _format_stats(before: str, after: str) -> str:
-    b_tok, b_method = count_tokens(before)
-    a_tok, _ = count_tokens(after)
-    saved = b_tok - a_tok
-    pct = (saved / b_tok * 100) if b_tok else 0.0
-    est = " (estimated)" if is_estimate(b_method) else ""
-    return (
-        f"[stats]{est} tokens: {b_tok} -> {a_tok} "
-        f"(saved {saved}, {pct:.1f}%)  chars: {len(before)} -> {len(after)}  "
-        f"[{b_method}]"
-    )
+    b, method = count_tokens(before)
+    a, _ = count_tokens(after)
+    saved = b - a
+    pct = (saved / b * 100) if b else 0.0
+    est = " (estimated)" if is_estimate(method) else ""
+    return (f"[stats]{est} tokens: {b} -> {a} (saved {saved}, {pct:.1f}%)  "
+            f"chars: {len(before)} -> {len(after)}  [{method}]")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Reduce tokens by removing structural redundancy (rule-based)."
-    )
+        description="Reduce tokens by removing redundancy (rule-based, offline).")
     parser.add_argument("input", nargs="?", help="input file; omit to read stdin")
     parser.add_argument("-o", "--output", help="write result to a file instead of stdout")
     parser.add_argument("--stats", action="store_true", help="print before/after token stats to stderr")
-    parser.add_argument("--no-whitespace", action="store_true", help="disable whitespace normalization")
-    parser.add_argument("--no-dedup", action="store_true", help="disable exact duplicate removal")
-    parser.add_argument("--no-near-dedup", action="store_true", help="disable near-duplicate removal")
-    parser.add_argument("--no-filler", action="store_true", help="disable filler-phrase trimming")
-    parser.add_argument("--similarity", type=float, default=0.9, help="near-duplicate threshold (0-1, default 0.9)")
+    parser.add_argument("--level", default="balanced", choices=["safe", "balanced", "aggressive"],
+                        help="reduction aggressiveness (default: balanced)")
+    parser.add_argument("--similarity", type=float, default=None, help="override near-duplicate threshold (0-1)")
+    parser.add_argument("--no-whitespace", action="store_true")
+    parser.add_argument("--no-dedup", action="store_true")
+    parser.add_argument("--no-near-dedup", action="store_true")
+    parser.add_argument("--no-sentence-dedup", action="store_true")
+    parser.add_argument("--no-filler", action="store_true")
+    parser.add_argument("--no-phrases", action="store_true")
+    parser.add_argument("--no-json", action="store_true")
     parser.add_argument("--tier2", action="store_true", help="opt into Tier 2 API summarization (needs ANTHROPIC_API_KEY)")
-    parser.add_argument("--tier2-chars", type=int, default=1200, help="Tier 2: min block length in chars to summarize")
+    parser.add_argument("--tier2-chars", type=int, default=1200)
     parser.add_argument("--code", action="store_true", help="code mode: strip comments/blank lines (see reduce_code.py)")
     args = parser.parse_args(argv)
 
@@ -265,33 +429,31 @@ def main(argv: list[str] | None = None) -> int:
         original = sys.stdin.read()
 
     if args.code:
-        # Delegate to the code-aware reducer (safe copy for context).
         from reduce_code import detect_lang, reduce_code
-        lang = detect_lang(args.input)
-        reduced = reduce_code(original, lang=lang)
-        if args.stats:
-            sys.stderr.write(_format_stats(original, reduced) + "\n")
-        if args.output:
-            with open(args.output, "w", encoding="utf-8") as fh:
-                fh.write(reduced + "\n")
-        else:
-            sys.stdout.write(reduced + "\n")
-        return 0
-
-    reduced = reduce_text(
-        original,
-        whitespace=not args.no_whitespace,
-        dedup=not args.no_dedup,
-        near_dedup=not args.no_near_dedup,
-        filler=not args.no_filler,
-        similarity=args.similarity,
-        tier2=args.tier2,
-        tier2_char_threshold=args.tier2_chars,
-    )
+        reduced = reduce_code(original, lang=detect_lang(args.input))
+    else:
+        overrides = {}
+        if args.no_whitespace:
+            overrides["whitespace"] = False
+        if args.no_dedup:
+            overrides["dedup"] = False
+        if args.no_near_dedup:
+            overrides["near_dedup"] = False
+        if args.no_sentence_dedup:
+            overrides["sentence_dedup"] = False
+        if args.no_filler:
+            overrides["filler"] = False
+        if args.no_phrases:
+            overrides["phrases"] = False
+        if args.no_json:
+            overrides["json"] = False
+        if args.similarity is not None:
+            overrides["similarity"] = args.similarity
+        reduced = reduce_text(original, level=args.level, overrides=overrides,
+                              tier2=args.tier2, tier2_char_threshold=args.tier2_chars)
 
     if args.stats:
         sys.stderr.write(_format_stats(original, reduced) + "\n")
-
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
             fh.write(reduced + "\n")
