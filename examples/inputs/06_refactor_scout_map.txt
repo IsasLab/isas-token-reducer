@@ -1,0 +1,27 @@
+# ROUTED APPROACH: context-scout returns ONLY this condensed map. The
+# implementer reads it (plus the specific ranges) instead of the full dump above.
+
+## Refactor map: add required `currency` param to format_price(amount)
+
+### Definition
+- src/pricing/format.py:1-4 — def format_price(amount); change signature to
+  (amount, currency); use currency for the symbol.
+- src/pricing/format.py:6-8 — format_discount calls format_price(amount); pass currency through.
+
+### Call sites (9)
+- src/pricing/cart.py:12 — total_label(); needs currency (thread through Cart).
+- src/pricing/cart.py:15 — line_labels() list comp.
+- src/pricing/invoice.py:6, :9 — render_invoice per-line and TOTAL.
+- src/pricing/receipt.py:4-6 — three calls (subtotal, tax, grand total).
+- src/api/checkout.py:6 — checkout_summary total.
+- src/api/orders.py:4 — order_confirmation.
+- src/notifications/email.py:4 — payment_email.
+- src/notifications/sms.py:4 — payment_sms.
+- src/reports/daily.py:4 — daily_revenue_line.
+
+### Tests to update (2)
+- tests/test_format.py:4,7 — expects "$..." with no currency arg.
+- tests/test_invoice.py:4-6 — asserts "TOTAL\t$3.50".
+
+### Risks
+- Cart has no currency field yet; decide whether to add one or pass at call time.

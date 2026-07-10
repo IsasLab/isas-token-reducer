@@ -1,0 +1,23 @@
+# Product Requirements: Notifications Service
+
+The notifications service delivers messages to users across email, SMS, and push channels. It must guarantee at-least-once delivery and deduplicate on the client side using the message ID.
+
+## Rate limits
+
+Each user may receive at most 5 notifications per hour and 20 per day. These limits are enforced per channel and reset on a rolling window.
+
+The notifications service delivers messages to users across email, SMS, and push channels. It must guarantee at-least-once delivery and deduplicate on the client side using the message ID.
+
+## Retry policy
+
+Failed deliveries are retried with exponential backoff: 1s, 2s, 4s, 8s, then dropped after 4 attempts. Retries are per channel and do not count against the rate limit.
+
+Each user may receive at most 5 notifications per hour and 20 per day. These limits are enforced per channel and reset on a rolling window.
+
+## Data retention
+
+Delivery logs are retained for 30 days, then anonymized. Message bodies are never logged; only metadata (channel, status, timestamp) is stored.
+
+Failed deliveries are retried with exponential backoff: 1s, 2s, 4s, 8s, then dropped after 4 attempts. Retries are per channel and do not count against the rate limit.
+
+The notifications service delivers messages to users across email, SMS, and push channels. It must guarantee at-least-once delivery and deduplicate on the client side using the message ID.

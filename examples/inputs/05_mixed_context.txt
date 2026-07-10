@@ -1,0 +1,20 @@
+# Meeting notes — Q3 planning
+
+
+
+It is important to note that we agreed on three priorities for Q3.
+
+
+Priority 1: ship the billing revamp. The billing revamp includes usage-based pricing and a new invoice layout. Target date is 2026-09-15.
+
+Priority 2: reduce onboarding drop-off. Current drop-off is 42% at the payment step.
+
+It is important to note that we agreed on three priorities for Q3.
+
+Priority 1: ship the billing revamp. As already stated, the billing revamp includes usage-based pricing and a new invoice layout. Target date is 2026-09-15.
+
+Priority 3: migrate the analytics pipeline to the new warehouse. Basically, this unblocks the self-serve dashboards.
+
+Priority 2: reduce onboarding drop-off. Current drop-off is 42% at the payment step.
+
+Needless to say, owners will be assigned by Friday. In conclusion, these three priorities are locked for Q3.

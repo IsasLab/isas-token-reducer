@@ -1,0 +1,8 @@
+# Normalize all text to LF in the repo so shell scripts run on Linux/macOS
+# (curl | bash of install.sh must not get CRLF line endings).
+* text=auto eol=lf
+
+# Belt-and-suspenders for the executable/text files that must be LF.
+*.sh text eol=lf
+*.py text eol=lf
+*.md text eol=lf

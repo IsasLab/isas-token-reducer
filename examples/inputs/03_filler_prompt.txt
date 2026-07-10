@@ -1,0 +1,5 @@
+It is important to note that the following requirements must all be satisfied by the final implementation. As previously mentioned, the API should be RESTful. It is worth noting that all endpoints must return JSON. Please note that authentication uses bearer tokens.
+
+Basically, the rate limit is 100 requests per minute per key. Needless to say, exceeding it returns a 429. Essentially, the retry-after header tells the client when to try again. Actually, the header value is in seconds.
+
+At the end of the day, the goal is a clean, documented, versioned API. In conclusion, ship v1 with the /users, /orders, and /invoices resources, and to summarize, keep the response schema stable within a major version.

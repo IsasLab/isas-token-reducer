@@ -1,0 +1,56 @@
+# NAIVE APPROACH: full text of 6 fetched sources dumped into one call to answer
+# "What are current best practices for cache invalidation in a CDN?"
+
+===== SOURCE 1: cdn-vendor-a.example/docs/cache-invalidation =====
+Cache invalidation is the process of removing or replacing cached content so
+that users receive updated resources. Our CDN supports three mechanisms: purge
+by URL, purge by cache tag, and purge everything. Purge by URL is precise but
+does not scale when thousands of objects change at once. Purge by cache tag lets
+you associate objects with a label at cache time and invalidate the whole label
+in a single call, which is the recommended approach for grouped content such as
+a product category. Purge everything is a blunt instrument that should be
+reserved for emergencies because it causes a thundering herd of origin fetches.
+Propagation typically completes within 5 seconds globally. You can also set short
+TTLs and rely on revalidation with ETags instead of active purging.
+
+===== SOURCE 2: cdn-vendor-b.example/blog/stale-while-revalidate =====
+Rather than invalidating aggressively, consider the stale-while-revalidate
+pattern. The cache serves slightly stale content immediately while fetching a
+fresh copy in the background. This decouples user latency from origin latency
+and avoids invalidation storms entirely. Combine a modest max-age with a longer
+stale-while-revalidate window. This is ideal for content that tolerates seconds
+of staleness, like article bodies, but not for content that must be exact, like
+account balances or inventory counts.
+
+===== SOURCE 3: web-standards.example/http-caching-primer =====
+HTTP caching is governed by Cache-Control, ETag, and Last-Modified headers. A
+strong validator (ETag) lets a client or CDN revalidate cheaply with a
+conditional request; a 304 Not Modified avoids re-downloading the body.
+Cache-Control: immutable tells caches the resource will never change during its
+freshness lifetime, eliminating revalidation for fingerprinted assets. Best
+practice for static assets is a content hash in the filename plus a one-year
+max-age with immutable, so invalidation is never needed for those assets.
+
+===== SOURCE 4: engineering-blog.example/cache-tags-at-scale =====
+We moved from URL-based purges to tag-based purges and cut invalidation API
+calls by 98%. The key was tagging each response with the entity IDs it depends
+on (e.g. product:123, category:9). When an entity changes, we purge its tag and
+every page that embedded it drops in one call. The tradeoff is bookkeeping: you
+must attach accurate tags at render time, and over-tagging causes unnecessarily
+broad invalidations. We recommend tagging by the smallest stable identifier.
+
+===== SOURCE 5: conference-talk-notes.example/cdn-consistency =====
+There is a fundamental tension between cache hit ratio and consistency. Longer
+TTLs raise hit ratio but widen the staleness window. The talk argued for
+event-driven invalidation: emit an event when data changes and have a worker
+issue targeted purges, rather than guessing TTLs. It also warned that purge
+propagation is eventually consistent, so a read immediately after a purge may
+still hit a stale edge for a second or two; design UIs to tolerate this.
+
+===== SOURCE 6: vendor-c.example/docs/soft-purge =====
+Soft purge marks content as stale without deleting it. The next request triggers
+a background revalidation while still serving the stale copy, combining the
+safety of purging with the latency of stale-while-revalidate. Use soft purge as
+the default and hard purge only when serving stale content would be harmful
+(legal takedowns, leaked data). Soft purge also protects the origin from a
+traffic spike after a broad invalidation.

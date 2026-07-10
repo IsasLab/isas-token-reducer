@@ -1,0 +1,26 @@
+# ROUTED APPROACH: research-gatherer condenses each source to key sentences.
+# The synthesizer works from THIS digest, not the six full pages above.
+
+Q: Best practices for CDN cache invalidation.
+
+- cdn-vendor-a — Tag-based purge is preferred over per-URL (scales to grouped
+  content); "purge everything" only for emergencies (thundering herd).
+  Propagation ~5s global. Short TTL + ETag revalidation is an alternative.
+- cdn-vendor-b — Stale-while-revalidate serves slightly stale content while
+  refreshing in background; avoids invalidation storms. Good for
+  staleness-tolerant content, NOT for exact data (balances, inventory).
+- web-standards — Use ETag/Cache-Control; fingerprinted static assets get
+  1-year max-age + immutable, so they never need invalidation.
+- engineering-blog — Tag responses with entity IDs (product:123); tag-based
+  purge cut invalidation calls 98%. Risk: over-tagging → broad invalidations;
+  tag by smallest stable ID.
+- conference-talk — Hit-ratio vs consistency tradeoff; prefer event-driven
+  targeted purges over TTL guessing. Purges are eventually consistent (~1-2s
+  stale window); design UIs to tolerate it.
+- vendor-c — Soft purge (serve stale + background revalidate) as the default;
+  hard purge only when stale content is harmful. Soft purge shields origin from
+  post-invalidation spikes.
+
+Cross-source agreement: prefer targeted/tag-based or event-driven invalidation
+over blanket purges; combine with stale-while-revalidate / soft purge; make
+fingerprinted assets immutable so they need no invalidation.

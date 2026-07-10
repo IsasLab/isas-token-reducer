@@ -1,0 +1,101 @@
+# NAIVE APPROACH: full contents of every file dumped into one model call so it
+# can rename format_price(amount) -> format_price(amount, currency) everywhere.
+
+===== src/pricing/format.py =====
+def format_price(amount):
+    """Return a human-readable price string for the given amount in cents."""
+    dollars = amount / 100
+    return f"${dollars:,.2f}"
+
+def format_discount(amount, pct):
+    base = format_price(amount)
+    return f"{base} (-{pct}%)"
+
+===== src/pricing/cart.py =====
+from src.pricing.format import format_price
+
+class Cart:
+    def __init__(self):
+        self.items = []
+
+    def add(self, sku, amount):
+        self.items.append((sku, amount))
+
+    def total_label(self):
+        total = sum(a for _, a in self.items)
+        return "Total: " + format_price(total)
+
+    def line_labels(self):
+        return [f"{sku}: {format_price(a)}" for sku, a in self.items]
+
+===== src/pricing/invoice.py =====
+from src.pricing.format import format_price
+
+def render_invoice(lines):
+    out = []
+    for sku, amount in lines:
+        out.append(f"{sku}\t{format_price(amount)}")
+    out.append("---")
+    out.append("TOTAL\t" + format_price(sum(a for _, a in lines)))
+    return "\n".join(out)
+
+===== src/pricing/receipt.py =====
+from src.pricing.format import format_price
+
+def receipt_footer(subtotal, tax):
+    return (
+        f"Subtotal: {format_price(subtotal)}\n"
+        f"Tax: {format_price(tax)}\n"
+        f"Grand total: {format_price(subtotal + tax)}"
+    )
+
+===== src/api/checkout.py =====
+from src.pricing.format import format_price
+from src.pricing.cart import Cart
+
+def checkout_summary(cart: Cart):
+    return {
+        "total": format_price(sum(a for _, a in cart.items)),
+        "lines": cart.line_labels(),
+    }
+
+===== src/api/orders.py =====
+from src.pricing.format import format_price
+
+def order_confirmation(order):
+    return f"Order {order['id']} confirmed for {format_price(order['amount'])}."
+
+===== src/notifications/email.py =====
+from src.pricing.format import format_price
+
+def payment_email(user, amount):
+    body = f"Hi {user}, we charged {format_price(amount)} to your card."
+    return body
+
+===== src/notifications/sms.py =====
+from src.pricing.format import format_price
+
+def payment_sms(amount):
+    return f"Payment of {format_price(amount)} received. Reply STOP to opt out."
+
+===== src/reports/daily.py =====
+from src.pricing.format import format_price
+
+def daily_revenue_line(day, cents):
+    return f"{day}: {format_price(cents)}"
+
+===== tests/test_format.py =====
+from src.pricing.format import format_price
+
+def test_format_price_basic():
+    assert format_price(1099) == "$10.99"
+
+def test_format_price_zero():
+    assert format_price(0) == "$0.00"
+
+===== tests/test_invoice.py =====
+from src.pricing.invoice import render_invoice
+
+def test_render_invoice_total():
+    out = render_invoice([("A", 100), ("B", 250)])
+    assert "TOTAL\t$3.50" in out

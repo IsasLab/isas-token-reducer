@@ -1,0 +1,23 @@
+User: Hi, I'm trying to set up the deployment pipeline for our staging environment. Can you help me understand the steps?
+
+Assistant: It is important to note that the deployment pipeline for staging has three stages: build, test, and release. Basically, the build stage compiles the app, the test stage runs the suite, and the release stage pushes to the staging server.
+
+User: Okay. And what about the build stage specifically?
+
+Assistant: The build stage compiles the app. As previously mentioned, the build stage compiles the app. It runs `npm run build` and outputs artifacts to the dist/ folder.
+
+User: Got it. Can you remind me what the three stages are again?
+
+Assistant: It is important to note that the deployment pipeline for staging has three stages: build, test, and release. Basically, the build stage compiles the app, the test stage runs the suite, and the release stage pushes to the staging server.
+
+User: And the test stage?
+
+Assistant: The test stage runs the suite. As already stated, the test stage runs the suite. It executes `npm test` and fails the pipeline if any test fails.
+
+User: Perfect. One more time, what are the three stages of the pipeline?
+
+Assistant: It is important to note that the deployment pipeline for staging has three stages: build, test, and release. Basically, the build stage compiles the app, the test stage runs the suite, and the release stage pushes to the staging server.
+
+User: Thanks, that's clear now.
+
+Assistant: Needless to say, if you have any further questions, feel free to ask. In conclusion, the pipeline is build, test, release.

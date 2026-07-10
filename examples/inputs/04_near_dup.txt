@@ -1,0 +1,11 @@
+The migration script backs up the database before applying any schema changes, then runs the ALTER statements in a single transaction so a failure rolls everything back cleanly.
+
+The migration script backs up the database before applying any schema changes, and then it runs the ALTER statements inside a single transaction so that a failure rolls everything back cleanly.
+
+Before applying schema changes the migration script backs up the database, then executes the ALTER statements within one transaction, so any failure rolls the whole thing back cleanly.
+
+Users are notified by email when their export is ready to download. The link expires after 24 hours for security reasons.
+
+Users receive an email notification once their export is ready to download; the download link expires after 24 hours for security reasons.
+
+The rollback procedure restores the pre-migration backup and replays the write-ahead log up to the last known-good checkpoint.
