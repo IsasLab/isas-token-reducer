@@ -151,11 +151,12 @@
     font-size: 15px;
   }
   .brand .mark {
-    width: 28px; height: 28px;
+    width: 30px; height: 30px;
     border-radius: 8px;
     overflow: hidden;
     background: #080e21;
-    box-shadow: 0 4px 14px rgba(27,58,143,0.30);
+    /* light ring keeps the dark tile visible on dark backgrounds too */
+    box-shadow: 0 0 0 1px rgba(150,170,225,0.30), 0 4px 14px rgba(27,58,143,0.30);
     flex: none;
   }
   .brand .mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -240,6 +241,15 @@
     opacity: 0.6;
   }
   .hero-inner { position: relative; z-index: 1; text-align: center; }
+  .hero-logo { display: flex; justify-content: center; margin-bottom: 28px; }
+  .hero-logo img {
+    width: 104px; height: 104px; border-radius: 26px; display: block;
+    background: #080e21;
+    /* light ring so the dark tile stays delineated on dark backgrounds,
+       plus a blue drop shadow for presence on white. */
+    box-shadow: 0 0 0 1px rgba(150,170,225,0.30), 0 18px 46px rgba(27,58,143,0.36);
+  }
+  @media (max-width: 480px) { .hero-logo img { width: 84px; height: 84px; border-radius: 21px; } }
   .pill {
     display: inline-flex;
     align-items: center;
@@ -619,6 +629,7 @@
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="wrap hero-inner">
+      <div class="hero-logo"><img src="logo-mark.png" alt="ISAS Token Reducer logo" width="104" height="104"></div>
       <span class="pill"><span class="dot"></span> Claude Skill · Private by default · One command</span>
       <h1 class="title">ISAS Token Reducer</h1>
       <p class="tagline">Humanity built powerful AI. Now we optimize its fuel.</p>
