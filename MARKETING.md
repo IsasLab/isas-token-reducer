@@ -1,7 +1,8 @@
 # Marketing kit — ISAS Token Reducer
 
 Ready-to-use copy for the repo, launch posts, and the landing page.
-A live landing page lives in [`docs/index.html`](docs/index.html) (enable GitHub
+The landing page lives in [`docs/token-reducer/index.html`](docs/token-reducer/index.html),
+linked from the IsasLab hub at [`docs/index.html`](docs/index.html) (enable GitHub
 Pages → "Deploy from branch" → `/docs`).
 
 **Honesty rule for all copy here:** never quote a fixed savings percentage.
