@@ -147,16 +147,20 @@ def _norm_key(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip()).lower()
 
 
-# Numeric literals in a paragraph, normalized (thousands-commas stripped). Used
-# to guard near-duplicate removal: two paragraphs that read almost identically
-# but carry a *different* number ("...12 apples..." vs "...18 apples...") are NOT
-# redundant — collapsing them would silently drop a fact. This keeps the core
-# safety promise ("numbers are never altered") true even for fuzzy dedup.
+# Numeric literals in a paragraph, in order of appearance, normalized
+# (thousands-commas stripped). Used to guard near-duplicate removal: two
+# paragraphs that read almost identically but carry different numbers, or the
+# same numbers attached to different facts ("...grew from 5 to 10..." vs
+# "...fell from 10 to 5...") are NOT redundant — collapsing them would
+# silently drop a fact. Comparing the numbers as an ordered sequence (not a
+# set) catches reordered/swapped numbers, not just added/removed ones, which
+# keeps the core safety promise ("numbers are never altered") true even for
+# fuzzy dedup.
 _NUMTOK_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 
 
-def _numeric_literals(s: str) -> frozenset[str]:
-    return frozenset(m.replace(",", "") for m in _NUMTOK_RE.findall(s))
+def _numeric_literals(s: str) -> tuple[str, ...]:
+    return tuple(m.replace(",", "") for m in _NUMTOK_RE.findall(s))
 
 
 def remove_exact_duplicates(text: str) -> str:
@@ -173,10 +177,11 @@ def remove_exact_duplicates(text: str) -> str:
 
 def remove_near_duplicates(text: str, threshold: float = 0.9) -> str:
     # A paragraph is only dropped as a near-duplicate of a kept one when it is
-    # BOTH textually similar (>= threshold) AND carries the identical set of
-    # numeric literals. The number-set guard means two paragraphs differing only
-    # in a figure are never collapsed, so no number is ever lost to fuzzy dedup.
-    kept: list[tuple[str, str, frozenset[str]]] = []
+    # BOTH textually similar (>= threshold) AND carries the identical ordered
+    # sequence of numeric literals. Comparing order (not just the set) means
+    # paragraphs that swap which number goes with which fact are never
+    # collapsed, so no number — or its meaning — is ever lost to fuzzy dedup.
+    kept: list[tuple[str, str, tuple[str, ...]]] = []
     for para in _split_paragraphs(text):
         key = _norm_key(para)
         nums = _numeric_literals(para)

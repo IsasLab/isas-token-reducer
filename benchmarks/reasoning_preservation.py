@@ -108,8 +108,14 @@ from typing import Any
 _ROOT = Path(__file__).resolve().parent.parent
 _SCRIPTS = _ROOT / "scripts"
 sys.path.insert(0, str(_SCRIPTS))
-from reduce import reduce_text  # noqa: E402
+from reduce import reduce_text, load_fillers, load_substitutions  # noqa: E402
 from count_tokens import count_tokens  # noqa: E402
+
+# Loaded once and reused across every reduce_text() call in this module — the
+# default (fillers=None/subs=None) path re-reads and re-parses these files
+# from disk on every call, which is wasteful across hundreds of records.
+_FILLERS = load_fillers()
+_SUBS = load_substitutions()
 
 # --------------------------------------------------------------------------- #
 # Constants
@@ -436,7 +442,7 @@ def run_reduction_diagnostics(sample: list[dict[str, Any]], level: str, tier2: b
         q = rec["question"]
         if len(q) > TIER2_CHAR_THRESHOLD:
             diag.n_exceeds_tier2_threshold += 1
-        red = reduce_text(q, level=level, tier2=tier2)
+        red = reduce_text(q, level=level, fillers=_FILLERS, subs=_SUBS, tier2=tier2)
         if red != q:
             diag.n_changed += 1
             if len(diag.examples) < 3:
@@ -588,7 +594,7 @@ def api_available() -> tuple[bool, str]:
 def transform_question(question: str, level: str | None, tier2: bool) -> str:
     if level is None:
         return question
-    return reduce_text(question, level=level, tier2=tier2)
+    return reduce_text(question, level=level, fillers=_FILLERS, subs=_SUBS, tier2=tier2)
 
 
 @dataclass
