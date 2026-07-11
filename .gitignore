@@ -2,8 +2,16 @@
 __pycache__/
 *.pyc
 
-# Build artifact (regenerate with scripts/build_claude_ai_zip.sh)
-isas-token-reducer.zip
+# Build / staging artifacts (regenerate with scripts/build_claude_ai_zip.sh)
+*.zip
+# Extracted staging bundles — their contents are integrated into the repo root
+# (tests/, .github/, CONTRIBUTING.md, CHANGELOG.md) and agents used to build the
+# benchmark. Kept locally, excluded from the tracked project.
+isas-token-reducer-repo-hygiene/
+reasoning-benchmark-agents/
 
 # Local tooling
 .code-review-graph/
+
+# Benchmark cache/output (downloaded dataset + run results, regenerated on demand)
+benchmarks/data/

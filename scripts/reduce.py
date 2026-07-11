@@ -147,6 +147,18 @@ def _norm_key(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip()).lower()
 
 
+# Numeric literals in a paragraph, normalized (thousands-commas stripped). Used
+# to guard near-duplicate removal: two paragraphs that read almost identically
+# but carry a *different* number ("...12 apples..." vs "...18 apples...") are NOT
+# redundant — collapsing them would silently drop a fact. This keeps the core
+# safety promise ("numbers are never altered") true even for fuzzy dedup.
+_NUMTOK_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+
+
+def _numeric_literals(s: str) -> frozenset[str]:
+    return frozenset(m.replace(",", "") for m in _NUMTOK_RE.findall(s))
+
+
 def remove_exact_duplicates(text: str) -> str:
     seen: set[str] = set()
     kept: list[str] = []
@@ -160,13 +172,19 @@ def remove_exact_duplicates(text: str) -> str:
 
 
 def remove_near_duplicates(text: str, threshold: float = 0.9) -> str:
-    kept: list[tuple[str, str]] = []
+    # A paragraph is only dropped as a near-duplicate of a kept one when it is
+    # BOTH textually similar (>= threshold) AND carries the identical set of
+    # numeric literals. The number-set guard means two paragraphs differing only
+    # in a figure are never collapsed, so no number is ever lost to fuzzy dedup.
+    kept: list[tuple[str, str, frozenset[str]]] = []
     for para in _split_paragraphs(text):
         key = _norm_key(para)
-        if any(SequenceMatcher(None, key, k).ratio() >= threshold for _, k in kept):
+        nums = _numeric_literals(para)
+        if any(nums == knums and SequenceMatcher(None, key, k).ratio() >= threshold
+               for _, k, knums in kept):
             continue
-        kept.append((para, key))
-    return "\n\n".join(p for p, _ in kept)
+        kept.append((para, key, nums))
+    return "\n\n".join(p for p, _, _ in kept)
 
 
 _SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
