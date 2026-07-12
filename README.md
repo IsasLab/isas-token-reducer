@@ -12,7 +12,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Zero dependencies](https://img.shields.io/badge/tier%201-zero%20dependencies-brightgreen.svg)](#whats-inside)
 
-[**Live demo & landing page →**](https://isaslab.github.io/isas-token-reducer/) · [Install](#installation) · [How it works](#how-it-works) · [Benchmark](#credibility-measured-not-claimed)
+[**Live demo →**](https://isaslab.github.io/isas-token-reducer/token-reducer/) · [IsasLab hub](https://isaslab.github.io/isas-token-reducer/) · [Install](#installation) · [How it works](#how-it-works) · [Benchmark](#credibility-measured-not-claimed)
 
 </div>
 
