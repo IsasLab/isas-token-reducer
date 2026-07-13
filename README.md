@@ -12,7 +12,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Zero dependencies](https://img.shields.io/badge/tier%201-zero%20dependencies-brightgreen.svg)](#whats-inside)
 
-[**Live demo →**](https://isaslab.github.io/isas-token-reducer/token-reducer/) · [IsasLab hub](https://isaslab.github.io/isas-token-reducer/) · [Install](#installation) · [How it works](#how-it-works) · [Benchmark](#credibility-measured-not-claimed)
+[**Live demo →**](https://isaslab.github.io/isas-token-reducer/token-reducer/) · [IsasLab hub](https://isaslab.github.io/isas-token-reducer/) · [Install](#installation) · [When it saves](#when-this-saves-you-tokens-and-when-it-wont) · [How it works](#how-it-works) · [Benchmark](#credibility-measured-not-claimed)
 
 </div>
 
@@ -21,13 +21,23 @@
 Most token waste happens **before the model even starts thinking** — duplicated
 paragraphs, filler phrases, and messy whitespace you pay full price to process.
 ISAS strips that structural redundancy first, so every token you spend on Claude
-earns its place. Tier 1 runs **100% offline** with zero dependencies and never
-touches a number, quote, line of code, or contract clause.
+earns its place. **Tier 1** — the default — runs **100% offline** with zero
+dependencies and, because it only ever *deletes* redundant structure, never
+touches a number, quote, line of code, or contract clause. An optional, opt-in
+**semantic tier** goes further by rewriting prose to be denser, but that path is
+*lossy* and only pays off under specific conditions — see
+[When this saves you tokens (and when it won't)](#when-this-saves-you-tokens-and-when-it-wont).
 
 ## Proof, not promises
 
-Real `--stats` output from running the tool on the fixtures in
-[`examples/inputs/`](examples/inputs) — reproduce any row yourself:
+**Read this first.** Savings depend *entirely* on how redundant *your* input is.
+Tier 1 can only remove structure that repeats — duplicate paragraphs, filler,
+whitespace. On genuinely unique, already-tight prose there is almost nothing to
+remove and the honest result is **~0–1%** (basic information theory: a lossless
+pass can't shrink text that carries no redundancy). The high numbers below are
+**real `--stats` output on deliberately redundant fixtures** in
+[`examples/inputs/`](examples/inputs) — they are the *top* of the range, not a
+typical result. Reproduce any row yourself:
 
 ```bash
 python scripts/reduce.py examples/inputs/02_dup_paragraphs.txt --stats -o /dev/null
@@ -35,17 +45,50 @@ python scripts/reduce.py examples/inputs/02_dup_paragraphs.txt --stats -o /dev/n
 
 | Input | What it is | Tokens before → after | Saved |
 |-------|------------|:---------------------:|:-----:|
-| `01_long_chat.txt` | Long chat, repeated answers + filler | 347 → 217 | **37.5%** |
-| `02_dup_paragraphs.txt` | Doc with duplicated paragraphs | 295 → 152 | **48.5%** |
-| `05_mixed_context.txt` | Meeting notes: dupes + filler + whitespace | 178 → 98 | **44.9%** |
-| `08_commented_module.js` | Heavily-commented JS (`--code` mode) | 448 → 138 | **69.2%** |
+| `07_research_digest.txt` | **Unique, non-redundant prose — the floor** | 270 → 270 | **~0%** |
+| `01_long_chat.txt` | Long chat, repeated answers + filler | 347 → 217 | 37.5% |
+| `02_dup_paragraphs.txt` | Doc with duplicated paragraphs | 295 → 152 | 48.5% |
+| `05_mixed_context.txt` | Meeting notes: dupes + filler + whitespace | 178 → 98 | 44.9% |
+| `08_commented_module.js` | Heavily-commented JS (`--code` mode) | 448 → 138 | 69.2% |
 
-> **Honesty rule:** savings depend entirely on how redundant *your* input is —
-> single digits on already-tight text, much higher on repetitive content. We
-> never quote a fixed number; you measure your own with `--stats`. Token counts
-> here use the labelled `words×1.3` fallback (install `tiktoken` for exact
-> counts); the *percentage* is reliable because the same method is used on both
-> sides.
+> **How the tokens are counted.** These counts use the labelled `words×1.3`
+> fallback because `tiktoken` wasn't installed in the measuring environment.
+> Even with it, `tiktoken`'s `cl100k_base` is a *GPT* tokenizer — a rough
+> approximation for Claude, not an exact match — so treat the absolute token
+> numbers as estimates. The **percentage is the reliable figure**, because the
+> same method is applied to both sides. For a true Claude count, the opt-in
+> `count_tokens_exact` helper calls the Anthropic token-counting API (needs a
+> key); it is never on the default path.
+
+## When this saves you tokens (and when it won't)
+
+Token reduction isn't free magic — it's economics. Here is the honest map, and
+`reduce.py --auto` will tell you which row *your* input falls into:
+
+| Your situation | What helps | Realistic result |
+|----------------|------------|------------------|
+| Redundant input — dupes, filler, boilerplate, verbose logs | **Tier 1** (free, offline) | Big cuts, tens of percent |
+| Unique, already-tight prose | Nothing lossless can | **~0–1%** — send it as-is |
+| Large unique context, a **cheaper** model condenses it for a **pricier** one | Semantic tier | Net saving on the expensive model's bill |
+| One condensed digest **reused** across many turns/calls | Semantic tier | Saving grows with each reuse |
+| Large unique context, **one-shot, same model** | Neither | **Net-negative — don't.** `--auto` warns and refuses by default |
+
+Two hard truths the tool will never hide:
+
+- **A lossless pass can't shrink text that has no redundancy.** That's
+  information theory, not a limitation we'll patch away. On unique prose,
+  deterministic savings are inherently tiny — that is the tool working correctly,
+  not failing.
+- **Semantic compression is lossy and costs tokens to run.** Reading your text in
+  order to condense it *spends* tokens. It only *nets* a saving when a cheap model
+  pays that cost on behalf of an expensive one, or when the smaller digest is read
+  many times. Paying an expensive model to condense its own one-shot input, only
+  to read it once, is a loss — and `reduce.py --auto` flags exactly that case and
+  declines by default.
+
+On **Claude.ai** (one model for the whole chat, no per-step routing) the
+cheap-condenses-for-expensive lever isn't available, so only the *reuse* lever
+remains — the advisor caps its claim accordingly.
 
 ## Credibility: measured, not claimed
 
@@ -93,10 +136,23 @@ isas-token-reducer/
 ```
 
 - **Tier 1 (always on, offline, zero deps):** whitespace normalization, exact &
-  near-duplicate removal, sentence dedup, filler-phrase trimming, verbose-phrase
-  compression, lossless JSON minify. Python standard library only.
-- **Tier 2 (optional, opt-in):** summarize long blocks via the Claude API — only
-  when you pass `--tier2` and set `ANTHROPIC_API_KEY`.
+  near-duplicate removal (paragraph, sentence, and list level), filler-phrase
+  trimming, verbose-phrase compression, markdown/table tidying, invisible-char
+  stripping, lossless JSON minify. Python standard library only. Byte-safe: it
+  *deletes* redundancy, it never rewrites your content.
+- **Tier 2 — the semantic tier (opt-in, LOSSY):** for text that is unique but too
+  large to send whole, a *cheap* model rewrites it denser. The primary path in
+  Claude Code is the skill-orchestrated **`context-condenser`** subagent
+  (`model: haiku` — no API key, no dependency): it reads the raw material in its
+  own throwaway context and hands your expensive model only a verified digest, so
+  the big model never ingests the raw dump. A deterministic fidelity check
+  (`scripts/semantic.py`) fails **closed** — if any number, code span, quote, or
+  name doesn't survive verbatim, the digest is discarded and the original is kept.
+  **This tier costs tokens to run and is net-negative for one-shot, same-model
+  use;** it only nets a saving cross-model (cheap→pricey) or on reuse. A
+  programmatic `--tier2` SDK call remains as a secondary fallback for pipelines
+  outside Claude Code. See
+  [When this saves you tokens](#when-this-saves-you-tokens-and-when-it-wont).
 - **Workflow routing (Claude Code):** for large refactors and multi-source
   research, cheap gathering subagents condense raw material before an expensive
   model reasons over it — the real token lever for big tasks.

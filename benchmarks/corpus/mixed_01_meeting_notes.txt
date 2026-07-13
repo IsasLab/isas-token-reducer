@@ -1,0 +1,13 @@
+Meeting notes — 2026-07-08
+
+Attendees: Priya, Marcus, Lena.
+
+Decision: ship the new onboarding flow behind a flag on 2026-07-15. It is important to note that the flag defaults to off, so nothing changes for existing users until we flip it.
+
+Marcus will migrate the 3 legacy endpoints to the v2 schema by Friday and post the diff for review.
+
+Decision: ship the new onboarding flow behind a flag on 2026-07-15.
+
+Open question: do we backfill the 12,000 dormant accounts during the cutover, or leave them untouched and migrate lazily on next login? Lena will bring cost numbers next week.
+
+At the end of the day, the priority is a clean cutover with no downtime.

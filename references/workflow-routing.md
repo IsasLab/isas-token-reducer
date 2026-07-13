@@ -1,11 +1,13 @@
 # Workflow routing for large tasks
 
-Text compression (Tier 1/2) trims redundancy inside a given context. It does
-**not** address the real cost driver of large tasks: loading a huge *raw*
-context (a whole codebase, dozens of sources) into one expensive model call. The
-lever there is **map-reduce routing** — cheap, fast subagents gather and condense
-raw material in their own isolated context windows, and only their condensed
-output flows into the capable model that does the actual reasoning/writing.
+Text compression shrinks a *given* context two ways: **Tier 1** (deterministic)
+removes structural redundancy losslessly; **Tier 2** (semantic) rewrites unique
+prose denser but is **lossy and costs tokens to run**. Neither, by itself,
+addresses the real cost driver of large tasks: loading a huge *raw* context (a
+whole codebase, dozens of sources) into one expensive model call. The lever
+there is **map-reduce routing** — cheap, fast subagents gather and condense raw
+material in their own isolated context windows, and only their condensed output
+flows into the capable model that does the actual reasoning/writing.
 
 ## Decision logic (`scripts/classify_task.py`)
 
@@ -30,8 +32,36 @@ agents to use.
 | Role | Model | Why |
 |------|-------|-----|
 | Gather / scan / triage (`context-scout`, `research-gatherer`) | **haiku** | High-volume, low-judgement reading. Cheap and fast; runs in an isolated context so raw material never touches the main window. |
+| Densify unique prose (`context-condenser`) | **haiku** | The semantic tier's cheap side. Reads a large, unique block and returns a lossy, fidelity-checked digest. Net-positive **only** cross-model (haiku → sonnet/opus) or when the digest is reused across ≥ 2 turns; refuse one-shot same-model use. Always run Tier 1 (`reduce.py`) first, then condense. |
 | Execute / write (`implementer`, `synthesizer`) | **sonnet** | The actual change or report, working from the condensed intermediate. |
 | Hard architectural/analytical judgement | **opus**, only on demand | Reserve for genuinely ambiguous trade-offs or final quality review of a large change. Not a default — it is the expensive tier. |
+
+## Semantic tier in routing (order + economics)
+
+The `context-condenser` subagent is the general-prose leg of routing: when the
+raw material is large and genuinely **unique** (Tier 1 can't shrink it) and it is
+headed for an expensive model, condense it on haiku first.
+
+**Fixed order: deterministic pre-pass → THEN semantic densify.**
+
+1. Run Tier 1 (`reduce.py`) on the raw material — free, byte-safe, removes
+   duplicates/filler/whitespace.
+2. Feed that Tier-1 output to `context-condenser` (haiku, isolated context). It
+   returns only a lossy, fidelity-checked digest.
+3. The expensive model reasons over the digest only; verify fidelity first
+   (`scripts/semantic.py --verify`) and fail closed to the Tier-1 text if any
+   number/name/quote/code span is missing.
+
+Never densify before deduping — trimming first can fuse two originally-distinct
+passages into false-identical text (silent fact loss) and spends the cheap model
+on redundancy Tier 1 would have removed for free.
+
+**Net-save rule (same as routing above):** condensing always costs one read, so
+it net-saves **only** cross-model (haiku → sonnet/opus) OR when the digest is
+reused across ≥ 2 turns. A **one-shot, same-model, single-pass** condense is
+**always net-negative** — the expensive model would read the raw once anyway;
+`reduce.py --auto` refuses it by default. Also hard-block legal/contract text,
+verbatim quotes, and exact-wording specs from semantic condensing entirely.
 
 ## Platform difference (read this — it is not the same everywhere)
 
@@ -52,8 +82,37 @@ within one chat. There, this skill can only supply the *strategy* as guidance:
 
 On Claude.ai the saving comes from the **structure** (condense, then process),
 not from cheaper per-step models. Do not claim the model-routing saving there.
+The same applies to the semantic tier: with one model for the whole chat there
+is no haiku-for-condensing price lever, so its only remaining justification is
+**reuse** (condense once, re-read the digest across many turns). A single-pass
+condense on Claude.ai is net-negative — skip it.
 
 ## Measured routing numbers (real, from `examples/`)
+
+**Read these caveats before you read the numbers — they decide whether the
+numbers apply to your task at all.**
+
+- **Net-benefit precondition.** Routing (and the semantic tier) only NET-saves
+  when a cheaper model does the gathering/condensing than the model that
+  consumes the result (**cross-model routing**), OR the condensed intermediate
+  is **reused across ≥ 2 downstream turns/calls**. A one-shot, same-model pass
+  gains nothing from routing — the reductions below are the *structural*
+  difference, not a free win.
+- **Excludes gathering tokens.** These measure only the structural token
+  difference (raw vs. condensed) that *drives* the saving; they do **not**
+  include the tokens the gathering/condensing subagents themselves spend. Treat
+  them as the mechanism's lower bound, not a guaranteed end-to-end figure.
+- **Refactor number understates.** The refactor fixtures are tiny (369 tok
+  total), so 45.8% *understates* real refactors: the scout map stays ~constant
+  while a naive dump grows with file size, so on real hundred-line files the
+  reduction is far larger. The research case (62.3%, real prose) is more
+  representative.
+- **Different mechanism from Tier 1 — not transplantable.** These routing/
+  semantic percentages measure *avoiding a raw load* across models/turns; the
+  Tier-1 percentages elsewhere measure *removing structural redundancy* in one
+  text. They are not the same lever and must **never** be quoted onto a small,
+  single-model task. There is **no** blanket "80% saved" guarantee — measure
+  your own task before quoting any number.
 
 Measured with the repo's own token counter (heuristic estimate — no `tiktoken`
 in the test env; same method both sides so the ratio holds). These compare the
@@ -64,16 +123,3 @@ the routed approach feeds to the capable model.
 |------|--------------------:|--------------------------------:|----------:|
 | Refactor across 10 files (`06_refactor_*`) | 369 tok | 200 tok | **45.8%** |
 | Research over 6 sources (`07_research_*`) | 716 tok | 270 tok | **62.3%** |
-
-### Honest caveats
-- **Not a full live benchmark.** These measure the structural token difference
-  (raw vs. condensed) that *drives* the saving; they do not include the tokens
-  the gathering subagents themselves spend. Treat them as the mechanism's lower
-  bound, not a guaranteed end-to-end figure.
-- **Task-dependent, no universal %.** The saving scales with how much raw
-  material you avoid loading. The refactor fixtures are tiny (369 tok total), so
-  45.8% *understates* real refactors: the scout map stays ~constant while a naive
-  dump grows with file size, so on real hundred-line files the reduction is far
-  larger. The research case (62.3%, real prose) is more representative.
-- There is **no** blanket "80% saved" guarantee. Measure your own tasks against
-  these examples before quoting a number.

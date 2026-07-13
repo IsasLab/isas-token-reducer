@@ -32,3 +32,10 @@ ambiguity, not routine reports.
 ## Output
 A structured report: brief answer up front, then supporting sections with inline
 source attribution, then a short "open questions / gaps" list.
+
+## Input note
+Your input is condensed digests, which may come from `research-gatherer` (web
+sources) or `context-condenser` (densified prose). Both are **lossy** working
+copies — so preserve every figure and name exactly as recorded, and if a digest
+notes it dropped or could not verify something, carry that caveat through rather
+than smoothing it over.

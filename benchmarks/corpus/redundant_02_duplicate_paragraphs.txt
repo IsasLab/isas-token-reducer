@@ -1,0 +1,7 @@
+The deployment pipeline builds the image, runs the test suite, and promotes the artifact to staging only when every check passes. Rollbacks are automatic if the error rate exceeds the threshold within the first window after release.
+
+The deployment pipeline builds the image, runs the test suite, and promotes the artifact to staging only when every check passes. Rollbacks are automatic if the error rate exceeds the threshold within the first window after release.
+
+The deployment pipeline builds the image, runs the test suite, and promotes the artifact to staging only when every check passes. Rollbacks are automatic if the error rate exceeds the threshold within the first window after release.
+
+Monitoring dashboards are owned by the platform team and reviewed at the start of each week.

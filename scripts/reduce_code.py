@@ -5,10 +5,15 @@ Reduces the token size of SOURCE CODE that you pass to Claude as *context*.
 It never rewrites your real files — it produces a leaner copy for the model.
 
 What it removes (all safe for a context copy, all configurable):
-  1. Comments        — language-aware. Preserves shebangs, encoding lines, and
-     directive comments (noqa, type:, pragma, eslint-disable, @ts-ignore,
-     go:build, clippy/allow, SPDX/license, …) so behavior-affecting comments
-     survive.
+  1. Comments        — language-aware and string-aware. Python (tokenize/ast),
+     C-family (// and /* */), '#' (shell/ruby/yaml/toml/powershell), '--'
+     (lua/sql), and ini/cfg/conf (';' and '#'). Preserves shebangs, encoding
+     lines, and directive comments (noqa, type:, pragma, eslint-disable,
+     @ts-ignore, go:build, clippy/allow, SPDX/license, …) so behavior-affecting
+     comments survive. A marker inside a string literal is never treated as a
+     comment (line-based scanners do not handle multi-line block comments such as
+     lua --[[ ]] or powershell <# #>, which are left intact — safe, just not
+     stripped).
   2. Blank lines     — collapse runs to one (default) or remove entirely.
   3. Trailing whitespace / tab normalization.
   Optional, off by default:
@@ -212,15 +217,20 @@ def strip_c_family(src: str, keep_directives: bool = True) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Hash-comment scanner ( # ), string-aware — shell, ruby, yaml, toml, …
+# Line-comment scanner, string-aware. Handles single-char ('#', ';') and
+# multi-char ('--') comment starters. A marker inside a '…' or "…" string is
+# never mistaken for a comment. Covers shell/ruby/yaml/toml/powershell ('#'),
+# lua/sql ('--'), and ini/cfg/conf (';' and '#').
 # --------------------------------------------------------------------------- #
-def strip_hash(src: str, keep_directives: bool = True) -> str:
+def strip_line_comment(
+    src: str, markers: tuple[str, ...], keep_directives: bool = True
+) -> str:
     out_lines: list[str] = []
     for row, line in enumerate(src.split("\n"), start=1):
         in_s = in_d = False
         cut = None
-        k = 0
-        while k < len(line):
+        k, n = 0, len(line)
+        while k < n:
             ch = line[k]
             if ch == "\\" and (in_s or in_d):
                 k += 2
@@ -229,7 +239,7 @@ def strip_hash(src: str, keep_directives: bool = True) -> str:
                 in_s = not in_s
             elif ch == '"' and not in_s:
                 in_d = not in_d
-            elif ch == "#" and not in_s and not in_d:
+            elif not in_s and not in_d and any(line.startswith(m, k) for m in markers):
                 cut = k
                 break
             k += 1
@@ -244,6 +254,11 @@ def strip_hash(src: str, keep_directives: bool = True) -> str:
     return "\n".join(out_lines)
 
 
+def strip_hash(src: str, keep_directives: bool = True) -> str:
+    """Strip '#' line comments (shell, ruby, yaml, toml, powershell, …)."""
+    return strip_line_comment(src, ("#",), keep_directives)
+
+
 # --------------------------------------------------------------------------- #
 # Dispatch + tidy
 # --------------------------------------------------------------------------- #
@@ -253,7 +268,9 @@ _C_FAMILY_EXT = {
     ".scala", ".php", ".m", ".mm", ".dart", ".proto",
 }
 _PY_EXT = {".py", ".pyi"}
-_HASH_EXT = {".sh", ".bash", ".zsh", ".rb", ".yml", ".yaml", ".toml", ".pl", ".r"}
+_HASH_EXT = {".sh", ".bash", ".zsh", ".rb", ".yml", ".yaml", ".toml", ".pl", ".r", ".ps1"}
+_DASH_EXT = {".lua", ".sql"}          # '--' line comments
+_INI_EXT = {".ini", ".cfg", ".conf"}  # ';' and '#' line comments
 
 
 def detect_lang(path: str | None) -> str:
@@ -266,6 +283,10 @@ def detect_lang(path: str | None) -> str:
         return "c"
     if ext in _HASH_EXT:
         return "hash"
+    if ext in _DASH_EXT:
+        return "dash"
+    if ext in _INI_EXT:
+        return "ini"
     return "unknown"
 
 
@@ -310,6 +331,10 @@ def reduce_code(
             src = strip_c_family(src, keep_directives)
         elif lang == "hash":
             src = strip_hash(src, keep_directives)
+        elif lang == "dash":
+            src = strip_line_comment(src, ("--",), keep_directives)
+        elif lang == "ini":
+            src = strip_line_comment(src, (";", "#"), keep_directives)
         # unknown: leave comments, just tidy whitespace
     return tidy_lines(src, blank_mode)
 
@@ -331,7 +356,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("input", nargs="?", help="source file; omit to read stdin (needs --lang)")
     p.add_argument("-o", "--output", help="write result to a file instead of stdout")
     p.add_argument("--stats", action="store_true", help="print before/after token stats to stderr")
-    p.add_argument("--lang", default="auto", choices=["auto", "python", "c", "hash", "unknown"],
+    p.add_argument("--lang", default="auto",
+                   choices=["auto", "python", "c", "hash", "dash", "ini", "unknown"],
                    help="language family (default: auto-detect by extension)")
     p.add_argument("--keep-comments", action="store_true", help="do not strip comments")
     p.add_argument("--no-keep-directives", action="store_true",

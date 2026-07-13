@@ -5,10 +5,15 @@ The landing page lives in [`docs/token-reducer/index.html`](docs/token-reducer/i
 linked from the IsasLab hub at [`docs/index.html`](docs/index.html) (enable GitHub
 Pages → "Deploy from branch" → `/docs`).
 
-**Honesty rule for all copy here:** never quote a fixed savings percentage.
-Real savings are input-dependent — modest on clean text, higher on repetitive
-content, largest via workflow routing on big tasks. Always point to `--stats`
-for real measurement.
+**Honesty rules for all copy here:**
+1. **Never quote a fixed savings percentage.** Real savings are input-dependent —
+   ~0–1% on unique, already-tight prose (information theory: a lossless pass can't
+   shrink text that has no redundancy), higher on repetitive content, largest via
+   workflow routing on big tasks. Always point to `--stats` for real measurement.
+2. **Never imply the semantic tier is "free savings."** It is *lossy* and *costs
+   tokens to run*. It only *nets* a saving when a cheaper model condenses for a
+   pricier one, or when the condensed artifact is reused across turns. One-shot,
+   same-model use is net-negative — copy must say so, never gloss over it.
 
 ---
 
@@ -35,13 +40,15 @@ and only the condensed result reaches your capable model.
 - **Subhead:** ISAS Token Reducer strips structural redundancy from your input —
   offline, safe, and measurable — so every token you spend on Claude earns its place.
 - **Support line:** One command to install, works in Claude Code and Claude.ai,
-  and never alters a single number, quote, or line of code.
+  and its default (Tier 1) reducer never alters a single number, quote, or line
+  of code.
 
 ## Feature value-props
 
 - **Private and offline by default.** Tier 1 runs entirely on your machine using
   the Python standard library — no API key, no network, nothing leaves your box.
-  Tier 2 API summarization is opt-in and only runs if you set a key.
+  The only path that hands text to a model is the opt-in semantic tier, which is
+  clearly flagged as *lossy* and never runs unless you ask for it.
 - **Safety-first by design.** It only removes *structural* redundancy — duplicate
   paragraphs, filler phrases, messy whitespace. Never rewrites numbers, quotes,
   code, names, or legal wording, and keeps the original when unsure.
@@ -70,11 +77,16 @@ and only the condensed result reaches your capable model.
 
 **How much will this actually save me?**
 It depends on your input, so measure it with `--stats` rather than trusting a
-headline number. On already-clean text, expect modest savings — single digits to
-teens. On repetitive or duplicated content, savings climb. The biggest lever is
-workflow routing on large tasks, where cheap subagents absorb the bulk before
-your expensive model sees it. We won't quote a fixed percentage, because any tool
-that does is guessing about your data.
+headline number. On genuinely unique, already-tight prose, expect almost nothing
+— **~0–1%**, because a lossless pass can't shrink text that has no redundancy. On
+repetitive or duplicated content, Tier 1 savings climb into the tens of percent.
+The semantic tier can compress unique prose much further, but it's **lossy and
+spends tokens to run**: it only *nets* a saving when a cheaper model condenses for
+a pricier one, or when the digest is reused — and it's net-negative for one-shot,
+same-model use. The biggest structural lever is workflow routing on large tasks,
+where cheap subagents absorb the bulk before your expensive model sees it. We
+won't quote a fixed percentage, because any tool that does is guessing about your
+data.
 
 **Is my data safe? Does it phone home?**
 Tier 1 is 100% offline with zero dependencies — no API key, no network, nothing
@@ -89,7 +101,11 @@ lines from a *context copy* you feed the model — it preserves strings, numbers
 logic, shebangs, and directive comments (`eslint-disable`, `noqa`, `type:`, …),
 and never rewrites your actual files. Code savings depend on comment density:
 ~8–12% on lightly-commented code, ~30–45% with docstring stripping, more in
-signature-only "skeleton" mode.
+signature-only "skeleton" mode. The opt-in **semantic tier** is different — it
+*does* rewrite prose (that's the point), so it is lossy by nature; a deterministic
+fidelity check runs afterward and fails **closed**, discarding the rewrite and
+keeping your original if any number, code span, quote, or name didn't survive
+verbatim.
 
 **Claude Code vs Claude.ai — what's the difference?**
 In Claude Code it installs as a skill and can use subagents for map-reduce
@@ -98,8 +114,12 @@ engine. Both share the same safe, offline core. (Per-step model routing is a
 Claude Code feature only.)
 
 **Is it free?**
-Yes, for noncommercial use — open source under the PolyForm Noncommercial
-license. Tier 1 costs nothing to run.
+The software is free for noncommercial use — open source under the PolyForm
+Noncommercial license. **Tier 1 costs nothing to run** — it's offline and spends
+no tokens. The **semantic tier is not free**: it spends model (Haiku) tokens to
+condense, so it only makes economic sense when a cheap model condenses for an
+expensive one, or when you reuse the digest across turns. Tier 1 is, and will
+stay, the zero-cost default.
 
 ## Launch blurbs
 

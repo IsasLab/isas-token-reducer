@@ -12,6 +12,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from reduce import reduce_text  # noqa: E402
@@ -116,3 +118,77 @@ def test_reduction_actually_reduces_on_redundant_input():
     )
     out = reduce_text(text, level="balanced")
     assert len(out) < len(text), "balanced level did not reduce a redundant input"
+
+
+# --------------------------------------------------------------------------- #
+# Semantic-tier fidelity verifier (scripts/semantic.py).
+#
+# The semantic tier is LOSSY by nature, so its whole safety story rests on a
+# deterministic guardrail — verify_fidelity() — that FAILS CLOSED when a cheap
+# model's rewrite silently drops a number, name, code span, or quote. These
+# tests make that guardrail falsifiable: if the verifier waves through a rewrite
+# that lost a fact, the "verified, fails closed" promise is false — fix the
+# verifier, not the test.
+#
+# semantic.py is delivered by a separate workstream; until it lands (and exposes
+# verify_fidelity) these tests skip rather than error, then run for real in
+# integration.
+# --------------------------------------------------------------------------- #
+
+# A dense source sentence carrying two ordered numbers and two proper-noun
+# parties — exactly the kind of fact-bearing prose the verifier must protect.
+_FIDELITY_SOURCE = (
+    "Acme Corporation must refund Sarah Connor 4200 dollars "
+    "within 30 days of the cancellation request."
+)
+
+
+def _semantic():
+    """Import scripts/semantic.py, skipping cleanly if it (or the verifier) is
+    not present yet."""
+    semantic = pytest.importorskip("semantic")
+    if not hasattr(semantic, "verify_fidelity"):
+        pytest.skip("semantic.verify_fidelity not available yet")
+    return semantic
+
+
+def test_semantic_verifier_catches_dropped_number():
+    """A condensation that keeps 4200 but silently drops the 30-day deadline
+    must be flagged — losing a number is the exact failure the verifier exists
+    to catch."""
+    semantic = _semantic()
+    condensed = "Acme Corporation must refund Sarah Connor 4200 dollars after cancellation."
+    report = semantic.verify_fidelity(_FIDELITY_SOURCE, condensed)
+    assert report.ok is False, "verifier failed to flag a dropped number"
+    assert "30" in report.missing_numbers, (
+        f"dropped number 30 not reported as missing: {report.missing_numbers}"
+    )
+
+
+def test_semantic_verifier_catches_dropped_name():
+    """A condensation that keeps every number but drops the named parties must
+    be flagged — a lost name is a lost fact just like a lost number."""
+    semantic = _semantic()
+    condensed = "The company must issue a 4200 dollar refund within 30 days."
+    report = semantic.verify_fidelity(_FIDELITY_SOURCE, condensed)
+    assert report.ok is False, "verifier failed to flag dropped proper nouns"
+    assert report.missing_proper_nouns, (
+        f"dropped names not reported as missing: {report.missing_proper_nouns}"
+    )
+
+
+def test_semantic_verifier_passes_faithful_condensation():
+    """The guardrail must not cry wolf: a genuine densification that drops only
+    filler while keeping every number (in order) and every name verbatim must
+    pass, or the tier is unusable."""
+    semantic = _semantic()
+    source = "It is important to note that " + _FIDELITY_SOURCE
+    faithful = (
+        "Acme Corporation must refund Sarah Connor 4200 dollars within 30 days."
+    )
+    report = semantic.verify_fidelity(source, faithful)
+    assert report.ok is True, (
+        "verifier wrongly flagged a faithful condensation: "
+        f"numbers={report.missing_numbers} names={report.missing_proper_nouns} "
+        f"code={report.missing_code} quotes={report.missing_quotes}"
+    )
